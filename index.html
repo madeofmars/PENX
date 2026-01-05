@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PENX - Handwriting & Drawing App</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- PDF.js library for PDF import support -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <style>
         body {
             margin: 0;
@@ -225,14 +227,24 @@
         </div>
     </div>
 
-    <button id="importBtn" class="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 rounded-md text-sm font-medium transition flex items-center justify-center gap-2 mb-2">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-            <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
-            <path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708l3-3z"/>
-        </svg>
-        Import Image
-    </button>
-    <input type="file" id="fileInput" accept="image/*" class="hidden">
+    <div class="grid grid-cols-2 gap-2 mb-2">
+        <button id="importBtn" class="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 rounded-md text-[10px] font-bold transition flex flex-col items-center justify-center gap-1">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
+                <path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708l3-3z"/>
+            </svg>
+            IMAGES/PDF
+        </button>
+        <button id="importFolderBtn" class="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 rounded-md text-[10px] font-bold transition flex flex-col items-center justify-center gap-1">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M.54 3.87.5 3a2 2 0 0 1 2-2h3.672a2 2 0 0 1 1.414.586l.828.828A2 2 0 0 0 9.828 3h3.982a2 2 0 0 1 1.992 2.181l-.637 7A2 2 0 0 1 13.174 14H2.826a2 2 0 0 1-1.991-1.819l-.637-7a1.99 1.99 0 0 1 .342-1.31zM2.19 4a1 1 0 0 0-.996 1.09l.637 7a1 1 0 0 0 .995.91h10.348a1 1 0 0 0 .995-.91l.637-7A1 1 0 0 0 13.81 4H2.19zm4.69-1.707A1 1 0 0 0 6.172 2H2.5a1 1 0 0 0-1 .981l.006.139C1.72 3.042 1.95 3 2.19 3h5.396l-.707-.707z"/>
+            </svg>
+            FOLDER
+        </button>
+    </div>
+    
+    <input type="file" id="fileInput" accept="image/*,.pdf" class="hidden">
+    <input type="file" id="folderInput" webkitdirectory directory multiple class="hidden">
 </div>
 
 <!-- Main Canvas Area -->
@@ -288,13 +300,18 @@
     const customColorInput = document.getElementById('customColor');
     const templateSelect = document.getElementById('templateSelect');
     const fileInput = document.getElementById('fileInput');
+    const folderInput = document.getElementById('folderInput');
     const importBtn = document.getElementById('importBtn');
+    const importFolderBtn = document.getElementById('importFolderBtn');
     const penTool = document.getElementById('penTool');
     const eraserTool = document.getElementById('eraserTool');
     const clearBtn = document.getElementById('clearBtn');
     const downloadBtn = document.getElementById('downloadBtn');
     const toast = document.getElementById('toast');
     
+    // Configure PDF.js worker
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
     // Focus Toggle Elements
     const focusToggle = document.getElementById('focusToggle');
     const sidePanel = document.getElementById('sidePanel');
@@ -345,13 +362,11 @@
         
         analyzeLoader.classList.remove('hidden');
         try {
-            // Get image data from current viewport to save bandwidth/speed
             const tempCanvas = document.createElement('canvas');
             const tempCtx = tempCanvas.getContext('2d');
             tempCanvas.width = 800;
             tempCanvas.height = 800;
             
-            // Draw current visible area or scaled version of full canvas
             tempCtx.fillStyle = 'white';
             tempCtx.fillRect(0,0,800,800);
             tempCtx.drawImage(canvas, 0, 0, 800, 800);
@@ -411,7 +426,7 @@
                 const x = container.scrollLeft + (window.innerWidth / 4);
                 const y = container.scrollTop + (window.innerHeight / 4);
                 ctx.globalCompositeOperation = 'source-over';
-                ctx.drawImage(img, x, y, 400, 400); // Draw at fixed size
+                ctx.drawImage(img, x, y, 400, 400); 
                 showToast("✨ AI Image Added!");
                 imageGenPrompt.value = "";
             };
@@ -539,25 +554,123 @@
         showToast('Drawing downloaded');
     });
 
-    importBtn.addEventListener('click', () => fileInput.click());
-    fileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
+    // Helper: Draw Image onto Canvas with Layout
+    function drawImageAtPos(img, x, y) {
+        const maxW = 800; // Increased width for PDF pages
+        const scale = Math.min(1, maxW / img.width);
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
+        return img.height * scale; // Return calculated height for vertical layout
+    }
+
+    // PDF Import Handler
+    async function handlePdfFile(file) {
+        showToast("Processing PDF...");
+        const fileReader = new FileReader();
+        fileReader.onload = async function() {
+            const typedArray = new Uint8Array(this.result);
+            const pdf = await pdfjsLib.getDocument(typedArray).promise;
+            
+            let currentX = container.scrollLeft + 100;
+            let currentY = container.scrollTop + 100;
+            const pageSpacing = 40;
+
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const viewport = page.getViewport({ scale: 1.5 });
+                
+                // Render PDF page to a temporary canvas
+                const tempCanvas = document.createElement('canvas');
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCanvas.height = viewport.height;
+                tempCanvas.width = viewport.width;
+
+                await page.render({
+                    canvasContext: tempCtx,
+                    viewport: viewport
+                }).promise;
+
+                // Draw that temporary canvas as an image onto our main canvas
+                const img = new Image();
+                img.onload = () => {
+                    const renderedHeight = drawImageAtPos(img, currentX, currentY);
+                    currentY += renderedHeight + pageSpacing; // Layout pages vertically
+                };
+                img.src = tempCanvas.toDataURL();
+            }
+            showToast(`Imported ${pdf.numPages} PDF pages`);
+        };
+        fileReader.readAsArrayBuffer(file);
+    }
+
+    // Image Import Handler
+    function handleImageFile(file) {
         const reader = new FileReader();
         reader.onload = (event) => {
             const img = new Image();
             img.onload = () => {
                 const x = container.scrollLeft + (window.innerWidth / 4);
                 const y = container.scrollTop + (window.innerHeight / 4);
-                const maxW = 800;
-                const scale = Math.min(1, maxW / img.width);
-                ctx.globalCompositeOperation = 'source-over';
-                ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
+                drawImageAtPos(img, x, y);
                 showToast('Image imported');
             };
             img.src = event.target.result;
         };
         reader.readAsDataURL(file);
+    }
+
+    // Unified File Import
+    importBtn.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        if (file.type === "application/pdf") {
+            handlePdfFile(file);
+        } else {
+            handleImageFile(file);
+        }
+    });
+
+    // Folder Import
+    importFolderBtn.addEventListener('click', () => folderInput.click());
+    folderInput.addEventListener('change', async (e) => {
+        const files = Array.from(e.target.files).filter(file => 
+            file.type.startsWith('image/') || /\.(jpg|jpeg|png|webp)$/i.test(file.name)
+        );
+        
+        if (files.length === 0) {
+            showToast("No images found in folder");
+            return;
+        }
+
+        showToast(`Importing ${files.length} images...`);
+        
+        let currentX = container.scrollLeft + 50;
+        let currentY = container.scrollTop + 100;
+        const spacing = 450;
+        const rowWidthLimit = canvas.width - 500;
+
+        for (const file of files) {
+            await new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        drawImageAtPos(img, currentX, currentY);
+                        currentX += spacing;
+                        if (currentX > rowWidthLimit) {
+                            currentX = container.scrollLeft + 50;
+                            currentY += spacing;
+                        }
+                        resolve();
+                    };
+                    img.src = event.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+        showToast("Folder import complete");
     });
 
     // AI Button Bindings
